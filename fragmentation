@@ -1,0 +1,222 @@
+-- Horizontal Fragmentation
+
+Create Table broker1 
+(
+    bid INT PRIMARY KEY,
+    bname VARCHAR(30),
+    bcontact varchar(10)
+);
+
+Create Table broker2
+(
+    bid INT PRIMARY KEY,
+    bname VARCHAR(30),
+    bcontact varchar(10)
+);
+
+INSERT INTO broker1 VALUES(1,'NAGPAL','9876543210')
+INSERT INTO broker1 VALUES(2,'PK AGENCY','8976543210')
+INSERT INTO broker1 VALUES(3,'SURESH P','8979873210')
+
+Select *FROM broker1 Union SELECT * FROM [509-19].land.dbo.broker2
+
+
+
+-- Vertical Fragmentation
+
+CREATE TABLE owner1 
+(
+   oid INT PRIMARY KEY,
+
+   ocontact varchar(10)
+);
+
+INSERT INTO owner1 VALUES(1,'9320399850')
+INSERT INTO owner1 VALUES(2,'9322011195')
+INSERT INTO owner1 VALUES(3,'9920260761')
+INSERT INTO owner1 VALUES(4,'9323552916')
+INSERT INTO owner1 VALUES(5,'9321044572')
+
+Select O.oid,P.oname,O.ocontact from owner1 as O , [509-19].land.dbo.owner2 AS P 
+WHERE O.oid=P.oid
+
+
+-- Mixed Fragmentation
+
+CREATE TABLE property1 
+(	pid INT PRIMARY KEY, address VARCHAR(100) NOT NULL, oid INT , 
+	CONSTRAINT fk_prI FOREIGN KEY(oid) REFERENCES owner(oid)
+	
+);
+
+
+CREATE TABLE property4 
+(	pid INT PRIMARY KEY, 
+	bid INT , CONSTRAINT fk_prD FOREIGN KEY(bid) REFERENCES broker(bid)
+);
+
+CREATE TABLE property3 
+(	pid INT PRIMARY KEY, address VARCHAR(100) NOT NULL, oid INT , 
+	CONSTRAINT fk_prA FOREIGN KEY(oid) REFERENCES owner(oid)
+	
+);
+
+CREATE TABLE property2 
+(	pid INT PRIMARY KEY, 
+	bid INT , CONSTRAINT fk_prB FOREIGN KEY(bid) REFERENCES broker(bid)
+);
+
+INSERT INTO property2 VALUES(1,4);
+INSERT INTO property2 VALUES(2,3);
+INSERT INTO property2 VALUES(3,1);
+INSERT INTO property2 VALUES(4,2);
+
+INSERT INTO property3 VALUES(5,'BANDRA',5);
+INSERT INTO property3 VALUES(6,'GOREGAON',5);
+INSERT INTO property3 VALUES(7,'COLABA',1);
+INSERT INTO property3 VALUES(8,'THANE',5);
+INSERT INTO property3 VALUES(9,'MULUND',3);
+INSERT INTO property3 VALUES(10,'GHATKOPAR',2);
+
+INSERT INTO property1 VALUES(1,'CHEMBUR',2)
+INSERT INTO property1 VALUES(2,'ANDHERI',3)
+INSERT INTO property1 VALUES(3,'ULHASNAGAR',4)
+INSERT INTO property1 VALUES(4,'VASHI',1)
+
+INSERT INTO property4 VALUES(5,5)
+INSERT INTO property4 VALUES(6,5)
+INSERT INTO property4 VALUES(7,4)
+INSERT INTO property4 VALUES(8,2)
+INSERT INTO property4 VALUES(9,1)
+INSERT INTO property4 VALUES(10,3)
+
+(SELECT P.pid,P.address,P.oid,Q.bid from property1 AS P, [509-19].land.dbo.property2 AS Q
+WHERE P.pid = Q.pid )
+UNION
+(SELECT A.pid,A.address,A.oid,B.bid from property4 AS B, [509-19].land.dbo.property3 AS A
+WHERE B.pid = A.pid )
+
+
+
+-- Derived Fragmentation
+
+CREATE TABLE ownerde1
+(
+   oid INT PRIMARY KEY,
+   oname varchar(30),
+   ocontact varchar(10)
+);
+
+CREATE TABLE ownerde2
+(
+   oid INT PRIMARY KEY,
+   oname varchar(30),
+   ocontact varchar(10)
+);
+
+CREATE TABLE propertyde
+(	pid INT PRIMARY KEY, address VARCHAR(100) NOT NULL, oid INT , 
+	CONSTRAINT fk_prde11 FOREIGN KEY(oid) REFERENCES owner(oid),
+	bid INT , CONSTRAINT fk_prde12 FOREIGN KEY(bid) REFERENCES broker(bid)
+);
+
+INSERT INTO propertyde VALUES(1,'CHEMBUR',2,4)
+INSERT INTO propertyde VALUES(2,'ANDHERI',3,3)
+INSERT INTO propertyde VALUES(3,'ULHASNAGAR',4,1)
+INSERT INTO propertyde VALUES(4,'VASHI',1,2)
+INSERT INTO propertyde VALUES(5,'BANDRA',5,5)
+INSERT INTO propertyde VALUES(6,'GOREGAON',5,5)
+INSERT INTO propertyde VALUES(7,'COLABA',1,4)
+INSERT INTO propertyde VALUES(8,'THANE',5,2)
+INSERT INTO propertyde VALUES(9,'MULUND',3,1)
+INSERT INTO propertyde VALUES(10,'GHATKOPAR',2,3)
+
+
+
+INSERT INTO ownerde1 VALUES(1,'AMEY','9320399850')
+INSERT INTO ownerde1 VALUES(2,'NIHAR','9322011195')
+INSERT INTO ownerde1 VALUES(3,'SIDDHESH','9920260761')
+INSERT INTO ownerde2 VALUES(4,'SUMEET','9323552916')
+INSERT INTO ownerde2 VALUES(5,'CHIRAG','9321044572')
+
+SELECT O.oid,O.oname,P.pid,P.address,P.bid FROM  ownerde1 AS O , [509-19].[land].dbo.propertyde AS P
+WHERE P.oid = O.oid
+
+
+
+FRAGMENT QUERIES
+
+-- DISPLAY THE OWNER DETAILS OF RESIDENTIAL PROPERTY HAVING AREA > 1000 SQFT AND MAINTAINANCE COST < 5000
+
+SELECT * FROM (Select O.oid,P.oname,O.ocontact from owner1 as O , [509-19].land.dbo.owner2 AS P 
+WHERE O.oid=P.oid)AS A WHERE A.oid IN(SELECT oid FROM property WHERE pid IN(SELECT pid FROM residential WHERE r_area_sqft>1000 AND maint_cost<5000));
+
+-- DISPLAY DETAILS OF OWNERS WHO HAVE LISTED THEIR PROPERTY WITH 'NARESH R' BROKER
+
+SELECT * FROM (Select O.oid,P.oname,O.ocontact from owner1 as O , [509-19].land.dbo.owner2 AS P 
+WHERE O.oid=P.oid)AS A WHERE A.oid IN(SELECT oid FROM property WHERE bid =(SELECT B.bid FROM (Select *FROM broker1 Union SELECT * FROM [509-19].land.dbo.broker2) AS B WHERE B.bname='NARESH R'));
+
+
+
+-- DISPLAY DETAILS OF OWNER AND HOW MANY PROPERTIES ARE LISTED BY THE PERSON WITH A BROKER.
+
+SELECT L.oid,L.oname,L.ocontact,COUNT(J.PID)AS no_of_properties FROM (Select O.oid,K.oname,O.ocontact from owner1 as O , [509-19].land.dbo.owner2 AS K
+WHERE O.oid=K.oid)AS L,
+((SELECT P.pid,P.address,P.oid,Q.bid from property1 AS P, [509-19].land.dbo.property2 AS Q
+WHERE P.pid = Q.pid )
+UNION
+(SELECT A.pid,A.address,A.oid,B.bid from property4 AS B, [509-19].land.dbo.property3 AS A
+WHERE B.pid = A.pid ))AS J WHERE L.oid=J.oid GROUP BY L.oid,L.oname,L.ocontact;
+
+-- creating rent fragment
+
+CREATE TABLE to_rent1
+(
+
+  pid INT ,  CONSTRAINT fk_tr1 FOREIGN KEY(pid)
+             REFERENCES property(pid),
+   rent_rate INT
+);
+CREATE TABLE to_rent2
+(
+
+  pid INT ,  CONSTRAINT fk_tr1 FOREIGN KEY(pid)
+             REFERENCES property(pid),
+   rent_rate INT
+);
+
+INSERT INTO to_rent1 VALUES(7,25000)
+INSERT INTO to_rent1 VALUES(8,10000)
+INSERT INTO to_rent1 VALUES(10,30000)
+INSERT INTO to_rent2 VALUES(1,20000)
+INSERT INTO to_rent2 VALUES(3,5000)
+INSERT INTO to_rent2 VALUES(6,20000)
+
+-- DISPLAY MAXIMUM RENT RATE OF PROPERTIES
+
+SELECT A.pid,A.rent_rate FROM (SELECT * FROM to_rent1
+UNION
+SELECT * FROM [509-19].land.dbo.to_rent2)AS A WHERE rent_rate=(SELECT MAX(B.rent_rate) FROM (SELECT * FROM to_rent1
+UNION
+SELECT * FROM [509-19].land.dbo.to_rent2) AS B);
+
+-- Display details of customer who have enquired about property at ghatkopar
+
+SELECT * FROM customer WHERE cid IN( SELECT cid FROM enquiry WHERE pid = ( SELECT pid FROM
+((SELECT P.pid,P.address,P.oid,Q.bid from property1 AS P, [509-19].land.dbo.property2 AS Q
+WHERE P.pid = Q.pid )
+UNION
+(SELECT A.pid,A.address,A.oid,B.bid from property4 AS B, [509-19].land.dbo.property3 AS A
+WHERE B.pid = A.pid ))AS J WHERE J.address= 'GHATKOPAR'));
+
+
+
+
+
+
+
+
+
+
+
+
